@@ -101,3 +101,34 @@
   display handoff may still differ from S-Boot's direct BOOT handoff.
   No source hardware address was changed from this map, and no new image
   was flashed or claimed boot-ready.
+
+## 2026-10-24 — live recovery device tree and diagnostic image
+
+- User supplied a live recovery FDT for Star2 rev26 / Exynos9810. Extracted
+  only relevant hardware evidence for this record; the full FDT contains
+  private identifiers and is not tracked or included in download packages.
+- Live `/chosen/bootargs` explicitly sets `s3cfb.bootloaderfb=0xcc000000`.
+  Updated loader FB_BASE and initial assembly cache-maintenance range to
+  `[0xcc000000, 0xcd042800)` (retained 1440x2960x4 geometry). Updated the
+  kernel patch generator to use the same framebuffer base; the checked-in
+  patch and ADT already used it. Direct S-Boot BOOT handoff and active
+  framebuffer geometry remain untested on device.
+- Live main interrupt controller confirms GICv2 at `0x10101000` and
+  `0x10102000`; physical timer and 26 MHz clock are also specified. The
+  live UFS node confirms `0x11120000/0x11121100`. Corrected UFS bases in
+  the ADT generator and bypassed loader probe. This does not enable or
+  validate the UFS probe or kernel storage driver.
+- Rebuilt loader with the repository build script. Repacked the user's
+  uploaded image as `/workspace/artifacts/star2lte-diagnostic-boot.img`:
+  new loader plus corrected GIC/UFS properties in the original payload ADT.
+  Verified original kernel segment bytes, boot arguments and Samsung DTBH
+  remain unchanged. Did not copy the live recovery tree into the image.
+  The boot-component SHA-1 ID, section bounds, ARM64 Image size and rebuilt
+  loader identity all pass; embedded ADT addresses match the selected
+  hardware evidence. Seven marker cases still pass.
+- Diagnostic image SHA-256:
+  `f07e2a08a6322c96587ffa5cfaafd0f0a45907eb35c641c6f44272ccf1e8ed35`.
+  This is an offline-validated diagnostic image, not a verified boot fix.
+  XNU was not rebuilt. Other kernel MMIO assumptions, PMIC operations,
+  display trigger configuration and actual device execution are unverified.
+  No flash or push was performed.

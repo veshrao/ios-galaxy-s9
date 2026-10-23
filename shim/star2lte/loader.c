@@ -24,7 +24,7 @@
 #define UFS_PROBE_DMA       0x8f0000000UL   /* high bank, outside XNU's window */
 
 /* ---- board facts (Exynos 9810 star2lte, live DT, /proc/iomem) ---- */
-#define FB_BASE             0x10000000UL    /* s3cfb.bootloaderfb */
+#define FB_BASE             0xcc000000UL    /* live DT s3cfb.bootloaderfb */
 #define FB_W                1440
 #define FB_H                2960
 #define FB_STRIDE           (FB_W * 4)

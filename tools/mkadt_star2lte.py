@@ -118,7 +118,7 @@ def build(canvas=(FB_W, FB_H)):
     
     # Exynos 9810 UFS register offsets
     root.children.append(mkadt.node('star2lte-ufs', [
-        ('reg', mkadt.u64(0x11240000, 0x200, 0x11241100, 0x200)),
+        ('reg', mkadt.u64(0x11120000, 0x200, 0x11121100, 0x200)),
     ]))
     return root
 

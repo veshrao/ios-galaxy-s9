@@ -36,7 +36,7 @@ edit('pexpert/pexpert/arm64/A5XELTE.h', [(
 ' */\n'
 '#define STAR2LTE                     1\n'
 '#if defined(STAR2LTE)\n'
-'#define A5_FB_PHYS                    0x10000000  /* s3cfb.bootloaderfb */\n'
+'#define A5_FB_PHYS                    0xcc000000  /* live DT s3cfb.bootloaderfb */\n'
 '#define A5_FB_WIDTH                   1440\n'
 '#define A5_FB_HEIGHT                  2960\n'
 '#define A5_FB_STRIDE                  5760        /* bytes per row */\n'

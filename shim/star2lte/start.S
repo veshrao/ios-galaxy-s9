@@ -28,8 +28,9 @@ _start:
 
 	/* Force-flush display cache lines (0xcc000000) so the screen console renders
 	 * directly from DRAM instead of displaying S-Boot's dirty cache lines. */
-	mov	x2, #0x10000000
-	mov	x3, #0x11000000		/* Flush entire 64MB framebuffer aperture */
+	mov	x2, #0xcc000000
+	mov	x3, #0x2800
+	movk	x3, #0xcd04, lsl #16	/* end: base + 1440 * 2960 * 4 */
 1:	dc	civac, x2		/* Clean and Invalidate data cache line by VA to PoC */
 	add	x2, x2, #64		/* Exynos 9810 cache line size (64 bytes) */
 	cmp	x2, x3

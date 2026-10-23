@@ -16,8 +16,8 @@
 #include <stdint.h>
 #include "ufs_probe.h"
 
-#define HCI         0x11240000UL    /* Exynos 9810 UFSHCI standard registers */
-#define VS_HCI      0x11241100UL    /* Exynos 9810 Exynos vendor HCI registers */
+#define HCI         0x11120000UL    /* live DT UFSHCI standard registers */
+#define VS_HCI      0x11121100UL    /* live DT vendor HCI registers */
 #define UFSP        0x11250000UL    /* Exynos 9810 UFS protector (FMP/SMU) */
 
 #define CAP     0x00
