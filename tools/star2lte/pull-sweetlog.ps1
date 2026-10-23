@@ -3,7 +3,7 @@ param([Parameter(Mandatory)][string]$Name)
 #  - the kernel's on-disk console ring (last 1025 blocks of USERDATA, sda24),
 #    decoded with tools/sweet-log.py -> logs/sweetlog-NAME.txt
 #  - the loader + early kernel text in ramoops pmsg -> logs/pmsg-NAME.txt
-# Usage: tools\dreamlte\pull-sweetlog.ps1 v25
+# Usage: tools\star2lte\pull-sweetlog.ps1 v25
 $ErrorActionPreference = 'Continue'
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $dir = Join-Path $repo 'logs'

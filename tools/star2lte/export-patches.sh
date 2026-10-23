@@ -11,13 +11,13 @@ cd /root/s8/xnu
 echo "== 0094/0095 results"
 grep -n 'MACHINE_FLAGS_ARM64_A5XELTE' makedefs/MakeInc.def
 grep -n '__ARM_PAN_AVAILABLE__' pexpert/pexpert/arm64/A5XELTE.h
-python3 "$here/apply-dreamlte.py" .
+python3 "$here/apply-star2lte.py" .
 git add -A
-git commit -qm 0124-dreamlte-s8.patch
+git commit -qm 0124-star2lte-s8.patch
 for name in 0094-a5xelte-cortex-a53-codegen.patch 0095-a5xelte-disable-pan.patch \
 	0106-a5xelte-amfi-bridge.patch 0107-a5xelte-4k-unsigned-dyld-cache.patch \
 	0108-a5xelte-userdata-write.patch 0112-a5xelte-two-core-smp.patch \
-	0122-a5xelte-pmic-linux-transfer-sequence.patch 0124-dreamlte-s8.patch; do
+	0122-a5xelte-pmic-linux-transfer-sequence.patch 0124-star2lte-s8.patch; do
 	c=$(git log --format=%H --grep="^$name\$" -n 1)
 	[[ -n $c ]] || { echo "no commit for $name" >&2; exit 1; }
 	git diff --no-color --no-prefix "$c~1" "$c" | sed -e 's#^--- \([^/]\)#--- a/\1#' -e 's#^+++ \([^/]\)#+++ b/\1#' > "$out/$name"
