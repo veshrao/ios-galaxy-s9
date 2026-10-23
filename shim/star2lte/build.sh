@@ -4,8 +4,8 @@
 # (PAYLOAD from tools/mkpayload.py; STOCK_BOOT supplies header and DTBH).
 set -euo pipefail
 cd "$(dirname "$0")"
-CC=aarch64-linux-gnu-gcc
-OBJCOPY=aarch64-linux-gnu-objcopy
+CC=aarch64-elf-gcc
+OBJCOPY=aarch64-elf-objcopy
 CFLAGS="-O2 -ffreestanding -nostdlib -fno-pic -mgeneral-regs-only -mstrict-align -fno-stack-protector -fno-tree-loop-distribute-patterns -march=armv8-a -Wall -Wextra -Werror"
 mkdir -p out
 $CC $CFLAGS -c start.S -o out/start.o
@@ -18,12 +18,12 @@ $CC $CFLAGS -c pmic.c -o out/pmic.o
 $CC $CFLAGS -c display_probe.c -o out/display_probe.o
 objs="out/loader.o out/fdt.o out/ufs_probe.o out/smp_probe.o out/touch_probe.o out/pmic.o out/display_probe.o"
 # Runs wherever S-Boot puts it with no relocation pass.
-abs=$(aarch64-linux-gnu-readelf -r $objs | grep -c ABS64 || true)
+abs=$(aarch64-elf-readelf -r $objs | grep -c ABS64 || true)
 [ "$abs" = 0 ] || { echo "error: $abs absolute relocations" >&2; exit 1; }
 $CC $CFLAGS -static -T loader.ld -Wl,--build-id=none -Wl,--no-warn-rwx-segments -Wl,-N \
 	out/start.o $objs -o out/loader.elf
 $OBJCOPY -O binary out/loader.elf out/Image
-size=$(aarch64-linux-gnu-nm out/loader.elf | awk '$3=="_end"{print strtonum("0x"$1)}')
+size=$(aarch64-elf-nm out/loader.elf | awk '$3=="_end"{print strtonum("0x"$1)}')
 truncate -s "$size" out/Image
 echo "out/Image: $(stat -c %s out/Image) bytes"
 if [ $# = 3 ]; then
