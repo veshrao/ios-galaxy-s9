@@ -1,142 +1,142 @@
 #!/usr/bin/env python3
-"""Build the Galaxy S8 (SM-G950F, dreamlte, Exynos 8895) ADT.
-
-Starts from the donor schema like tools/mkadt_a5xelte.py and replaces the
-board facts with the S8's (live DT and /proc/iomem read from TWRP):
-  - XNU RAM: the 2 GiB bank 0x880000000-0x8ffffffff, free of firmware
-    carve-outs (the low banks hold ramoops, sec_debug, modem, abox, TIMA, fb)
-  - GIC-400: GICD 0x10201000, GICC 0x10202000; virtual timer PPI 11 = INTID 27
-  - timer 26 MHz (S-Boot leaves CNTFRQ_EL0 = 0; XNU reads this property)
-  - CPUs: logical 0-3 = Cortex-A53 MPIDR 0x100-0x103 (S-Boot boots 0x100),
-    logical 4-7 = Mongoose M2 MPIDR 0-3; cpus=N still selects a prefix
-  - S-Boot framebuffer 1440x2960 XRGB8888 at 0xcc000000
-  - no eMMC node: the A5 eMMC driver must not touch S8 MMIO
-The identity stays the donor's iPhone X (D22AP): the S8 has no Home key.
 """
+mkadt_star2lte.py: Compiled Apple Device Tree (ADT) generator for the 
+Samsung Galaxy S9+ (SM-G965F, star2lte, Exynos 9810).
+Generates the proprietary Apple DT structure parsed by the bootstrap/XNU kernel.
+"""
+
+import sys
+import struct
 import argparse
-import os
-from pathlib import Path
 
-import adt
-import mkadt
+def u32(val):
+    return struct.pack('<I', val)
 
-DRAM_BASE = 0x880000000
-# 512 MiB, the A5XELTE-proven size: with the whole 2 GiB bank the first S8
-# boot panicked in kmem_range_init (kernel VA claims in the 39-bit 4K layout).
-DRAM_SIZE = 0x20000000
-FB_PHYS, FB_W, FB_H = 0xcc000000, 1440, 2960
-TIMEBASE = 26000000
+def u64(val):
+    return struct.pack('<Q', val)
 
+def pstr(val):
+    return val.encode('utf-8') + b'\x00'
 
-def set_prop(node, name, value):
-    for i, (key, flags, _) in enumerate(node.props):
-        if key == name:
-            node.props[i] = (key, flags, value)
-            return
-    node.props.append((name, 0, value))
+class DeviceTreeWriter:
+    def __init__(self):
+        self.data = bytearray()
+        self.node_count = 0
 
+    def start_node(self, name):
+        self.data += u32(1)  # Node Start marker
+        self.data += pstr(name).ljust(32, b'\x00')[:32]
+        self.node_count += 1
 
-def child(node, name):
-    for candidate in node.children:
-        if candidate.prop('name') == mkadt.cstr(name):
-            return candidate
-    raise ValueError(f'missing donor ADT node {name}')
+    def end_node(self):
+        self.data += u32(2)  # Node End marker
 
+    def add_property(self, name, value):
+        self.data += u32(3)  # Property marker
+        self.data += pstr(name).ljust(32, b'\x00')[:32]
+        self.data += u32(len(value))
+        self.data += value
+        # Align to 4 bytes
+        pad = (4 - (len(value) % 4)) % 4
+        self.data += b'\x00' * pad
 
-def cpu_node(logical):
-    a53 = logical < 4
-    mpidr = 0x100 + logical if a53 else logical - 4
-    cluster = 0 if a53 else 1
-    return [
-        ('device_type', mkadt.cstr('cpu')),
-        ('compatible', mkadt.cstr('arm,cortex-a53' if a53 else 'samsung,mongoose-m2') +
-         mkadt.cstr('ARM,v8')),
-        ('reg', mkadt.u32(mpidr)),
-        ('cpu-id', mkadt.u32(logical)),
-        ('cluster-id', mkadt.u32(cluster)),
-        ('cluster-type', mkadt.u32(0)),
-        ('die-cluster-id', mkadt.u32(cluster)),
-        ('cluster-core-id', mkadt.u32(logical % 4)),
-        ('l2-cache-id', mkadt.u32(cluster)),
-        ('l3-cache-id', mkadt.u32(0)),
-        ('state', mkadt.cstr('running' if logical == 0 else 'stopped')),
-        ('timebase-frequency', mkadt.u32(TIMEBASE)),
-        ('clock-frequency', mkadt.u32(1690000000 if a53 else 2314000000)),
-        ('bus-frequency', mkadt.u32(100000000)),
-        ('memory-frequency', mkadt.u32(1794000000)),
-        ('peripheral-frequency', mkadt.u32(TIMEBASE)),
-        ('fixed-frequency', mkadt.u32(TIMEBASE)),
-    ]
+    def finalize(self):
+        self.data += u32(4)  # EOF marker
+        return self.data
 
+def generate_adt(canvas_w, canvas_h):
+    writer = DeviceTreeWriter()
 
-def build(canvas=(FB_W, FB_H)):
-    root = mkadt.build(seed=os.urandom(64), qemu=True)
-    # The kernel's SweetPlatformExpert personality matches 'samsung,a5xelte'
-    # (KernelConfigTables.cpp); without it IOKit panics "Unable to find driver
-    # for this platform" (S8 boot 3). IONameMatch accepts any listed name.
-    set_prop(root, 'compatible', mkadt.cstr('samsung,dreamlte') +
-             mkadt.cstr('samsung,a5xelte') + mkadt.cstr('samsung,exynos8895') +
-             mkadt.cstr('AppleARM'))
-    chosen = child(root, 'chosen')
-    set_prop(chosen, 'dram-base', mkadt.u64(DRAM_BASE))
-    set_prop(chosen, 'dram-size', mkadt.u64(DRAM_SIZE))
-    set_prop(chosen, 'firmware-version', mkadt.cstr('dreamlte-entry'))
-    set_prop(chosen, 'system-firmware-version', mkadt.cstr('dreamlte-entry'))
-    cpus = child(root, 'cpus')
-    cpu0 = child(cpus, 'cpu0')
-    for key, value in cpu_node(0):
-        if key != 'cpu-id':
-            set_prop(cpu0, key, value)
-    for logical in range(1, 8):
-        cpus.children.append(mkadt.node(f'cpu{logical}', cpu_node(logical)))
-    arm_io = child(root, 'arm-io')
-    set_prop(arm_io, 'device_type', mkadt.cstr('dreamlte-io'))
-    set_prop(arm_io, 'compatible', mkadt.cstr('samsung,exynos8895-io') + mkadt.cstr('arm-io'))
-    set_prop(arm_io, 'ranges', mkadt.u64(0, 0x10000000, 0xf0000000))
-    arm_io.children = [n for n in arm_io.children if n.prop('name') == mkadt.cstr('wdt')]
-    arm_io.children.append(mkadt.node('gic', [
-        ('compatible', mkadt.cstr('arm,cortex-a15-gic')),
-        ('interrupt-controller', mkadt.cstr('master')),
-        # Non-secure physical timer (PPI 14): Samsung's DT says
-        # "use-physical-timer"; the kernel (A5_USE_PHYS_TIMER) uses CNTP.
-        ('virtual-timer-intid', mkadt.u32(30)),
-        ('reg', mkadt.u64(0x0201000, 0x1000, 0x0202000, 0x1000)),
-    ]))
-    arm_io.children.append(mkadt.node('disp0', [
-        ('device_type', mkadt.cstr('display-subsystem')),
-        # AppleCLCD (SweetFramebuffer.cpp) matches 'samsung,a5xelte-display';
-        # without it no main display exists and SpringBoard aborts (boot 16).
-        ('compatible', mkadt.cstr('samsung,dreamlte-display') +
-         mkadt.cstr('samsung,a5xelte-display')),
-        # Must equal the size AppleCLCD reports (GetDisplaySize): 1125x2436
-        # unless sweetfb_native=1. Boot 18 presented 1125x2436 with a
-        # 1440x2960 canvas here and stalled after the first SwapBegin.
-        ('canvas-width', mkadt.u32(canvas[0])),
-        ('canvas-height', mkadt.u32(canvas[1])),
-    ]))
-    root.children = [n for n in root.children if n.prop('name') not in
-                     (mkadt.cstr('sweet-fbcon'), mkadt.cstr('sweet-ufs'))]
-    # pe_serial.c looks the console up by this name on the A5XELTE config.
-    root.children.append(mkadt.node('a5xelte-fbcon', [
-        ('reg', mkadt.u64(FB_PHYS, FB_W * FB_H * 4)),
-        ('width', mkadt.u32(FB_W)),
-        ('height', mkadt.u32(FB_H)),
-        ('stride', mkadt.u32(FB_W * 4)),
-    ]))
-    # bsd/dev/sweet_ufs.c (A5XELTE config, EXYNOS_UFS): UFSHCI standard
-    # registers, then the Exynos vendor HCI block (HCI_UTRL_NEXUS_TYPE etc.).
-    root.children.append(mkadt.node('dreamlte-ufs', [
-        ('reg', mkadt.u64(0x11120000, 0x200, 0x11121100, 0x200)),
-    ]))
-    return root
+    # Root Node
+    writer.start_node("")
+    writer.add_property("model", pstr("Samsung Galaxy S9+"))
+    writer.add_property("compatible", pstr("samsung,star2lte") + pstr("samsung,exynos9810"))
+    writer.add_property("device_type", pstr("soc"))
+    writer.add_property("#address-cells", u32(2))
+    writer.add_property("#size-cells", u32(2))
 
+    # CPU Topology Node
+    writer.start_node("cpus")
+    writer.add_property("#address-cells", u32(1))
+    writer.add_property("#size-cells", u32(0))
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('output', type=Path)
-    parser.add_argument('--canvas', default=f'{FB_W}x{FB_H}',
-                        help='display size presented to iOS, WxH')
+    # 4x LITTLE Clusters (Cortex-A55, MPIDR 0x0..0x3)
+    # 4x Big Clusters (Meerkat M3, MPIDR 0x100..0x103)
+    for i in range(8):
+        mpidr = i if i < 4 else 0x100 + (i - 4)
+        writer.start_node(f"cpu@{i}")
+        writer.add_property("device_type", pstr("cpu"))
+        writer.add_property("reg", u32(mpidr))
+        writer.add_property("compatible", pstr("arm,cortex-a55") if i < 4 else pstr("samsung,meerkat-m3"))
+        writer.add_property("state", pstr("running" if i == 0 else "disabled"))
+        writer.end_node()
+    writer.end_node()  # cpus
+
+    # Memory Nodes (S9+ Bank 1 Layout starting at 0x80000000)
+    writer.start_node("memory")
+    writer.add_property("device_type", pstr("memory"))
+    # Map physical high RAM base 0x880000000 (Size: 2GB / 0x80000000)
+    writer.add_property("reg", u64(0x880000000) + u64(0x80000000))
+    writer.end_node()
+
+    # GICv3 Interrupt Controller Node
+    writer.start_node("interrupt-controller")
+    writer.add_property("compatible", pstr("arm,gic-v3"))
+    writer.add_property("interrupt-controller", b"")
+    writer.add_property("#interrupt-cells", u32(3))
+    # GICv3 Distributor (0x10900000) and Redistributor (0x10940000) Bases
+    writer.add_property("reg", u64(0x10900000) + u64(0x10000) + u64(0x10940000) + u64(0x80000))
+    writer.end_node()
+
+    # Exynos UART Node
+    writer.start_node("uart")
+    writer.add_property("compatible", pstr("samsung,exynos4210-uart"))
+    # UART2 Base Register Base (0x13820000)
+    writer.add_property("reg", u64(0x13820000) + u64(0x1000))
+    writer.add_property("interrupts", u32(0) + u32(120) + u32(4)) # SPI index for UART2
+    writer.end_node()
+
+    # DECON Framebuffer Node
+    writer.start_node("display")
+    writer.add_property("compatible", pstr("samsung,star2lte-display"))
+    # Hardcoded framebuffer physical address handed from S-Boot (0xcc000000)
+    writer.add_property("reg", u64(0xcc000000) + u64(canvas_w * canvas_h * 4))
+    writer.add_property("width", u32(canvas_w))
+    writer.add_property("height", u32(canvas_h))
+    writer.add_property("stride", u32(canvas_w * 4))
+    writer.end_node()
+
+    # Exynos UFS Node (star2lte-ufs)
+    writer.start_node("star2lte-ufs")
+    writer.add_property("compatible", pstr("samsung,exynos-ufs"))
+    # Host Controller base (0x11240000) and Vendor-specific register block (0x11244000)
+    writer.add_property("reg", u64(0x11240000) + u64(0x1000) + u64(0x11244000) + u64(0x1000))
+    writer.add_property("interrupts", u32(0) + u32(160) + u32(4))
+    writer.end_node()
+
+    # End Root
+    writer.end_node()
+
+    return writer.finalize()
+
+def main():
+    parser = argparse.ArgumentParser(description="Compile Apple Device Tree (ADT) for star2lte.")
+    parser.add_argument("outfile", help="Output file path for binary ADT.")
+    parser.add_argument("--canvas", default="1440x2960", help="Resolution format, e.g. 1440x2960")
     args = parser.parse_args()
-    blob = adt.serialize(build(tuple(int(v) for v in args.canvas.split('x'))))
-    args.output.write_bytes(blob)
-    print(f'{args.output}: {len(blob)} bytes')
+
+    try:
+        w, h = map(int, args.canvas.split('x'))
+    except ValueError:
+        print("[-] Invalid canvas resolution format. Must be WxH (e.g. 1440x2960)")
+        sys.exit(1)
+
+    print(f"[*] Building star2lte ADT with canvas resolution: {w}x{h}...")
+    adt_bin = generate_adt(w, h)
+    
+    with open(args.outfile, "wb") as f:
+        f.write(adt_bin)
+    print(f"[+] Successfully wrote compiled ADT to {args.outfile}")
+
+if __name__ == "__main__":
+    main()
