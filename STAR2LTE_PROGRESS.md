@@ -72,3 +72,32 @@
   PMIC access, RAM window and framebuffer handoff still require device
   evidence. No new BOOT image is claimed boot-ready, no flash was performed,
   and no push is authorized.
+
+## 2026-10-24 — recovery /proc/iomem evidence
+
+- The user supplied recovery `/proc/iomem`. It lists System RAM at
+  `0x80000000..0xbc7fffff`, `0xc0000000..0xdfffffff`,
+  `0xe1900000..0xff7fffff`, and `0x880000000..0x97fffffff`.
+  The configured high XNU RAM bank exists; this does not establish that
+  every byte is free of boot-time firmware reservations or live data.
+- Loader framebuffer clear `[0x10000000, 0x11042800)` crosses registered
+  watchdog, UART, I2C, SPI and USB MMIO. This is not a usable framebuffer
+  interval and is an early abort/corruption candidate before the first
+  console message. Do not substitute another address without evidence.
+  `0xcc000000` lies in System RAM, but the map does not identify it as
+  the bootloader framebuffer.
+- Recovery confirms UFS HCI `0x11120000..0x111201ff` and vendor HCI
+  `0x11121100..0x111212ff`, not the source's `0x11240000/0x11241100`.
+  The loader UFS probe is currently bypassed; correcting its base alone
+  would not verify the driver or explain the earliest display failure.
+- Display DECON range `0x16030000..0x1603ffff` and SPEEDY
+  `0x141c0000..0x141c1fff` are listed; that does not validate individual
+  register offsets, values or boot-time clock/power state.
+- The listed `gicd/gicc` at `0x17cf1000/0x17cf2000` must not be assumed
+  to replace the main CPU interrupt-controller addresses established by
+  the stock DT. Obtain live device-tree identity and topology first.
+- Next read-only evidence: pull `/sys/firmware/fdt` from recovery. Inspect
+  live `/chosen`, memory and display/reserved-memory properties. Recovery
+  display handoff may still differ from S-Boot's direct BOOT handoff.
+  No source hardware address was changed from this map, and no new image
+  was flashed or claimed boot-ready.
