@@ -79,6 +79,12 @@ def generate_adt(canvas_w, canvas_h):
     writer.add_property("reg", u64(0x880000000) + u64(0x80000000))
     writer.end_node()
 
+    # Chosen Node (Required by mkpayload.py for PHYS_BASE / MEM_SIZE)
+    writer.start_node("chosen")
+    writer.add_property("dram-base", u64(0x880000000))
+    writer.add_property("dram-size", u64(0x80000000))
+    writer.end_node()
+
     # GICv3 Interrupt Controller Node
     writer.start_node("interrupt-controller")
     writer.add_property("compatible", pstr("arm,gic-v3"))

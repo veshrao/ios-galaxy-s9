@@ -5,7 +5,7 @@
 # yet, so the first trials end in a root-mount panic by design.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
-kernel=$(realpath "$1"); stock=$(realpath "$2"); out=$(realpath "$3")
+kernel=$(realpath "$1"); stock=$(realpath "$2"); touch "$3" && out=$(realpath "$3")
 shift 3
 # a5touchprobe=0: the A5 touch probe maps Exynos7580 I2C/GPIO; on the S8 its
 # first read is a synchronous external abort (boot 8, a5xelte_touch_probe).
