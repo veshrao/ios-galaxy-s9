@@ -13,11 +13,11 @@
 #define FB_STRIDE           (1440u * 4)
 #define TIMER_HZ            26000000UL
 
-/* Exynos 9810 DPU IDMA channels */static const uintptr_t idma = {
+/* Exynos 9810 DPU IDMA channels */static const uintptr_t idma[] = {
     0x14051000UL, 0x14052000UL, 0x14053000UL, 0x14054000UL, 0x14055000UL, 0x14057000UL,
 };
 
-/* Exynos 9810 Display SYSMMU blocks */static const uintptr_t sysmmu = { 0x14080000UL, 0x14090000UL, 0x140a0000UL };
+/* Exynos 9810 Display SYSMMU blocks */static const uintptr_t sysmmu[] = { 0x14080000UL, 0x14090000UL, 0x140a0000UL };
 
 static inline uint32_t rd(uintptr_t a) { return *(volatile uint32_t *)a; }
 static inline void wr(uintptr_t a, uint32_t v) { *(volatile uint32_t *)a = v; }

@@ -16,8 +16,9 @@
 
 #define PSCI_CPU_ON     0xc4000003UL
 #define TIMER_HZ        26000000UL
+
 extern char smp_entry[];
-extern volatile uint64_t smp_flags;  /* start.S: set by a started core */
+extern volatile uint64_t smp_flags[8];  /* start.S: set by a started core */
 
 static inline uint32_t rd(uintptr_t a) { return *(volatile uint32_t *)a; }
 static inline void wr(uintptr_t a, uint32_t v) { *(volatile uint32_t *)a = v; }
@@ -60,27 +61,17 @@ static void regs(void (*kv)(const char *, uint64_t), uint64_t m)
     kv("l2", rd(CL_L2(c)));
 }
 
-/* Poll a PMU bit with a timeout; 1 = reached. */
-static int wait_bit(uintptr_t a, uint32_t bit, unsigned ms)
-{
-    uint64_t end = ticks() + TIMER_HZ / 100 * ms;
-    while (ticks() < end)
-        if (rd(a) & bit)
-            return 1;
-    return 0;
-}
-
 /* Meerkat M3 (CLUSTER0, MPIDR 0x100-0x103) bring-up test on Exynos 9810 */
-void mngs_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *))
+void mngs_probe(void (*kv_fn)(const char *, uint64_t), void (*out_fn)(const char *))
 {
-    out("M3 (Meerkat) probe (Mongoose/Meerkat cluster 1) - star2lte\n");
-    kv("seq st", rd(PMU + 0x2484));
-    kv("seq opt", rd(PMU + 0x2488));
-    kv("cpu10 st", rd(CPU_STAT(0x100)));
-    out("\n");
+    out_fn("M3 (Meerkat) probe (Mongoose/Meerkat cluster 1) - star2lte\n");
+    kv_fn("seq st", rd(PMU + 0x2484));
+    kv_fn("seq opt", rd(PMU + 0x2488));
+    kv_fn("cpu10 st", rd(CPU_STAT(0x100)));
+    out_fn("\n");
 
     /* Map Meerkat M3 Cluster power sequence registers on Exynos 9810 */
-    smp_flags = 0;
+    smp_flags[4] = 0;
     wr(CPU_CFG(0x100), rd(CPU_CFG(0x100)) & ~0xfu);
     uint64_t end = ticks() + TIMER_HZ / 10;
     while (ticks() < end && (rd(CPU_STAT(0x100)) & 0xf))
@@ -92,9 +83,9 @@ void mngs_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *))
     while (ticks() < end && (rd(CPU_STAT(0x100)) & 0xf) != 0xf)
         ;
 
-    kv("first CPU_ON rc", (uint64_t)rc0);
-    kv("cpu10 st", rd(CPU_STAT(0x100)));
-    out("\n");
+    kv_fn("first CPU_ON rc", (uint64_t)rc0);
+    kv_fn("cpu10 st", rd(CPU_STAT(0x100)));
+    out_fn("\n");
 
     int up = wait_flag(4, 100);
     int64_t rc = 0;
@@ -102,36 +93,36 @@ void mngs_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *))
         rc = smc3(PSCI_CPU_ON, 0x100, (uintptr_t)smp_entry, 4);
         up = wait_flag(4, 300);
     }
-    kv("CPU_ON rc", (uint64_t)rc);
-    kv("MEERKAT STARTED", up);
-    out("\nM3 probe done\n");
+    kv_fn("CPU_ON rc", (uint64_t)rc);
+    kv_fn("MEERKAT STARTED", up);
+    out_fn("\nM3 probe done\n");
 }
 
-void smp_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *))
+void smp_probe(void (*kv_fn)(const char *, uint64_t), void (*out_fn)(const char *))
 {
     /* Targets: Cortex-A55 LITTLE core (0x001), Meerkat M3 big core (0x100) */
     static const uint64_t targets[] = { 0x001, 0x100 };
     uint64_t self = 0;
     __asm__ volatile("mrs %0, mpidr_el1" : "=r"(self));
-    out("SMP probe - star2lte\n");
-    kv("boot mpidr", self & 0xffffff);
-    regs(kv, self & 0xffffff);
-    out("\n");
+    out_fn("SMP probe - star2lte\n");
+    kv_fn("boot mpidr", self & 0xffffff);
+    regs(kv_fn, self & 0xffffff);
+    out_fn("\n");
 
     for (unsigned t = 0; t < sizeof(targets) / sizeof(targets[0]); t++) {
         uint64_t m = targets[t];
         unsigned slot = (((m >> 8) & 1) << 2) | (m & 3);
         smp_flags[slot] = 0;
-        kv("target", m);
-        regs(kv, m);
-        out("\n");
+        kv_fn("target", m);
+        regs(kv_fn, m);
+        out_fn("\n");
 
         int64_t rc = smc3(PSCI_CPU_ON, m, (uintptr_t)smp_entry, slot);
         int up = wait_flag(slot, 300);
-        kv(" CPU_ON rc", (uint64_t)rc);
-        kv("started", up);
-        regs(kv, m);
-        out("\n");
+        kv_fn(" CPU_ON rc", (uint64_t)rc);
+        kv_fn("started", up);
+        regs(kv_fn, m);
+        out_fn("\n");
 
         if (up)
             continue;
@@ -144,15 +135,15 @@ void smp_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *))
         while (ticks() < end && (rd(CPU_STAT(m)) & 0xf) != 0xf)
             ;
 
-        out(" after PMU power-up:");
-        regs(kv, m);
-        out("\n");
+        out_fn(" after PMU power-up:");
+        regs(kv_fn, m);
+        out_fn("\n");
         rc = smc3(PSCI_CPU_ON, m, (uintptr_t)smp_entry, slot);
         up = wait_flag(slot, 300);
-        kv(" CPU_ON rc", (uint64_t)rc);
-        kv("started", up);
-        regs(kv, m);
-        out("\n");
+        kv_fn(" CPU_ON rc", (uint64_t)rc);
+        kv_fn("started", up);
+        regs(kv_fn, m);
+        out_fn("\n");
     }
-    out("SMP probe done\n");
+    out_fn("SMP probe done\n");
 }

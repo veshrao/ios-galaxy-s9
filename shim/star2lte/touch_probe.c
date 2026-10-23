@@ -166,9 +166,10 @@ static void dump(const char *what, const uint8_t *b, unsigned n, uint32_t st)
     }
     out("\n");
 }
+
 void touch_probe(void (*kv_fn)(const char *, uint64_t), void (*out_fn)(const char *))
 {
-    uint8_t c, b;
+    uint8_t c, b[11];
     uint32_t st;
 
     kv = kv_fn;
@@ -231,16 +232,18 @@ void touch_probe(void (*kv_fn)(const char *, uint64_t), void (*out_fn)(const cha
     kv("gpa1 dat", rd(GPA1_CON + 4));
     out("\nTOUCH probe done\n");
 }
+
 /* One 16-bit LE fuel-gauge register read */
 static void fg_show(const char *name, uint8_t reg)
 {
-    uint8_t b;
+    uint8_t b[2];
     uint32_t st = xfer(&reg, 1, b, 2);
-    kv(name, st ? 0xdead0000u | (st & 0xffff) : (uint32_t)(b[0] | b << 8));
+    kv(name, st ? 0xdead0000u | (st & 0xffff) : (uint32_t)(b[0] | b[1] << 8));
 }
+
 void battery_probe(void (*kv_fn)(const char *, uint64_t), void (*out_fn)(const char *))
 {
-    uint8_t r, b;
+    uint8_t r, b[2];
     kv = kv_fn;
     out = out_fn;
     out("BATTERY (MAX77865 hsi2c_star2lte 0x14350000)\n");

@@ -10,22 +10,23 @@ CFLAGS="-O2 -ffreestanding -nostdlib -fno-pic -mgeneral-regs-only -mstrict-align
 mkdir -p out
 $CC $CFLAGS -c start.S -o out/start.o
 $CC $CFLAGS -c loader.c -o out/loader.o
+$CC $CFLAGS -c smp_probe.c -o out/smp_probe.o
 $CC $CFLAGS -c ../fdt.c -o out/fdt.o
 $CC $CFLAGS -c ufs_probe.c -o out/ufs_probe.o
-$CC $CFLAGS -c smp_probe.c -o out/smp_probe.o
+
 $CC $CFLAGS -c touch_probe.c -o out/touch_probe.o
 $CC $CFLAGS -c pmic.c -o out/pmic.o
 $CC $CFLAGS -c display_probe.c -o out/display_probe.o
-objs="out/loader.o out/fdt.o out/ufs_probe.o out/smp_probe.o out/touch_probe.o out/pmic.o out/display_probe.o"
+objs="out/loader.o out/fdt.o out/ufs_probe.o  out/touch_probe.o out/pmic.o out/display_probe.o"
 # Runs wherever S-Boot puts it with no relocation pass.
 abs=$(aarch64-elf-readelf -r $objs | grep -c ABS64 || true)
 [ "$abs" = 0 ] || { echo "error: $abs absolute relocations" >&2; exit 1; }
 $CC $CFLAGS -static -T loader.ld -Wl,--build-id=none -Wl,--no-warn-rwx-segments -Wl,-N \
 	out/start.o $objs -o out/loader.elf
 $OBJCOPY -O binary out/loader.elf out/Image
-size=$(aarch64-elf-nm out/loader.elf | awk '$3=="_end"{print strtonum("0x"$1)}')
+size=$(aarch64-elf-nm out/loader.elf | awk '$3=="_end"{printf("%d\n", "0x"$1)}')
 truncate -s "$size" out/Image
-echo "out/Image: $(stat -c %s out/Image) bytes"
+echo "out/Image: $(stat -f %z out/Image) bytes"
 if [ $# = 3 ]; then
 	python3 ../../tools/star2lte_mkboot.py "$1" out/Image "$2" "$3"
 	sha256sum "$3"
