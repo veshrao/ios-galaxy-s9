@@ -27,6 +27,6 @@ size=$(aarch64-linux-gnu-nm out/loader.elf | awk '$3=="_end"{print strtonum("0x"
 truncate -s "$size" out/Image
 echo "out/Image: $(stat -c %s out/Image) bytes"
 if [ $# = 3 ]; then
-	python3 ../../tools/dreamlte_mkboot.py "$1" out/Image "$2" "$3"
+	python3 ../../tools/star2lte_mkboot.py "$1" out/Image "$2" "$3"
 	sha256sum "$3"
 fi
