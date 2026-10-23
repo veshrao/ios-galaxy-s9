@@ -220,11 +220,20 @@ static uint64_t fail(const char *why)
 
 static void reserve_marker(void)
 {
-    uint32_t at = (uint32_t)(XNU_MARKER_PHYS - (RAMOOPS_CONSOLE + 12));
     const char *tag = "\nXNU entry marker: [";
     uint32_t tag_len = 0;
     while (tag[tag_len])
         tag_len++;
+    /* A stale marker address must not make padding stall at a full log. */
+    if (XNU_MARKER_PHYS < RAMOOPS_CONSOLE + 12) {
+        out("Skipping XNU entry marker: outside console buffer\n");
+        return;
+    }
+    uint64_t at = XNU_MARKER_PHYS - (RAMOOPS_CONSOLE + 12);
+    if (at < tag_len || at > PRZ_DATA_MAX - 10 || log_len > at - tag_len) {
+        out("Skipping XNU entry marker: no room in console buffer\n");
+        return;
+    }
     while (log_len < at - tag_len)
         log_ch1(log_len % 128 == 127 ? '\n' : ' ');
     for (uint32_t i = 0; i < tag_len; i++)
