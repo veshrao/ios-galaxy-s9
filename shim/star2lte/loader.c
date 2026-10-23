@@ -28,10 +28,10 @@
 #define FB_STRIDE           (FB_W * 4)
 #define DECON_TRIG          0x14040070UL    /* Exynos 9810 DECON HW_SW_TRIG_CONTROL */
 #define DECON_TRIG_UNMASK   0x1401U         /* Exynos 9810 trigger unmask */
-#define RAMOOPS_CONSOLE     0x92080000UL    /* TWRP ramoops console zone */
-#define RAMOOPS_CONSOLE_SIZE 0x80000UL
+#define RAMOOPS_CONSOLE     0xfed10000UL    /* TWRP ramoops console zone */
+#define RAMOOPS_CONSOLE_SIZE 0x8000UL
 #define PRZ_SIG             0x43474244U     /* "DBGC" */
-#define XNU_MARKER_PHYS     0x920ff000UL    /* A5_ENTRY_MARKER_PHYS in 0125 */
+#define XNU_MARKER_PHYS     0x8f0ff000UL    /* A5_ENTRY_MARKER_PHYS in 0125 */
 #define LOW_RAM_BASE        0x80000000UL    /* initrd must be in the low bank */
 #define LOW_RAM_END         0xbc800000UL
 #define XNU_RAM_BASE        0x880000000UL   /* 2 GiB high bank */
@@ -44,7 +44,7 @@ struct prz {
     uint32_t sig, start, size;
     uint8_t data[];
 };
-#define RAMOOPS_PMSG        0x92180000UL    /* after dump, console, ftrace */
+#define RAMOOPS_PMSG        0xfed14000UL    /* after dump, console, ftrace */
 static volatile struct prz *const prz = (volatile struct prz *)RAMOOPS_CONSOLE;
 static volatile struct prz *const prz2 = (volatile struct prz *)RAMOOPS_PMSG;
 #define PRZ_DATA_MAX        (RAMOOPS_CONSOLE_SIZE - 12)

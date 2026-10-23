@@ -45,7 +45,7 @@ edit('pexpert/pexpert/arm64/A5XELTE.h', [(
 '#define A5_BOOT_MPIDR                 0x000       /* first Cortex-A55 */\n'
 '#define A5_KEYS_DEFAULT               1           /* S9+ keys: GPA0/GPA2 */\n'
 '#define A5_TOUCH_DEFAULT              0           /* A5 ZT7538 path absent */\n'
-'#define A5_KLOG_PHYS                  0x92180000  /* TWRP ramoops pmsg zone */\n'
+'#define A5_KLOG_PHYS                  0xfed10000  /* TWRP ramoops pmsg zone */\n'
 '#define A5_KLOG_SIZE                  0x80000\n'
 '/* Samsung\'s S9 kernel DT: arch timer "use-physical-timer".\n'
 ' * Use the non-secure physical timer, PPI 14 = INTID 30. */\n'
