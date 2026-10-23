@@ -22,12 +22,12 @@
 #define UFS_PROBE_DMA       0x8f0000000UL   /* high bank, outside XNU's window */
 
 /* ---- board facts (Exynos 9810 star2lte, live DT, /proc/iomem) ---- */
-#define FB_BASE             0xcc000000UL    /* s3cfb.bootloaderfb */
+#define FB_BASE             0x10000000UL    /* s3cfb.bootloaderfb */
 #define FB_W                1440
 #define FB_H                2960
 #define FB_STRIDE           (FB_W * 4)
-#define DECON_TRIG          0x14040070UL    /* Exynos 9810 DECON HW_SW_TRIG_CONTROL */
-#define DECON_TRIG_UNMASK   0x1401U         /* Exynos 9810 trigger unmask */
+#define DECON_TRIG          0x16030070UL    /* Exynos 9810 DECON HW_SW_TRIG_CONTROL */
+#define DECON_TRIG_UNMASK   0x5401U         /* Exynos 9810 trigger unmask */
 #define RAMOOPS_CONSOLE     0xfed10000UL    /* TWRP ramoops console zone */
 #define RAMOOPS_CONSOLE_SIZE 0x8000UL
 #define PRZ_SIG             0x43474244U     /* "DBGC" */
@@ -389,20 +389,33 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
     }
     out("\n");
 
-    /* Hardware probes adapted for initial bringup */
-    ufs_probe(kv, out, UFS_PROBE_DMA);
+    /* 
+     * Bypassing dangerous early hardware probes:
+     * UFS, Touch, Battery, and Display probes probe unclocked MMIO blocks 
+     * causing Synchronous External Aborts (0x11240000). 
+     * XNU has its own full drivers to initialize them properly!
+     */
+    out("Bypassing hardware probes...\n");
+    (void)ufs_probe;
+    (void)touch_probe;
+    (void)battery_probe;
+    (void)display_probe;
+
+    /* Read RTC from PMIC over SPEEDY bus */
     rtc_bootarg(ba, pmic_init(kv, out));
     clean(ba_pa, ba_pa + PAGE_SIZE);
-    touch_probe(kv, out);
-    battery_probe(kv, out);
-    display_probe(kv, out);
-    /* smp_probe / mngs_probe bypassed for initial single-core bringup */
 
     fg = 0xff40ff40U;
     out("\nJUMP TO XNU\n");
     reserve_marker();
+
+    /* Flush logs to persistent RAM */
     clean(RAMOOPS_CONSOLE, RAMOOPS_CONSOLE + RAMOOPS_CONSOLE_SIZE);
     clean(RAMOOPS_PMSG, RAMOOPS_PMSG + RAMOOPS_CONSOLE_SIZE);
+
+    /* Flush entire framebuffer so the AMOLED displays the logs! */
+    clean(FB_BASE, FB_BASE + (FB_STRIDE * FB_H));
+
     return entry_pa;
 }
 
