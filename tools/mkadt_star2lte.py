@@ -2,7 +2,7 @@
 Starts from the donor schema like tools/mkadt_a5xelte.py and replaces the
 board facts with the S9+'s:
   - XNU RAM: the 2 GiB bank 0x880000000-0x8ffffffff, free of firmware carve-outs
-  - GICv3 Distributor: 0x10900000 (size 0x10000), Redistributors: 0x10940000 (size 0x80000)
+  - Stock DT GICv2: distributor 0x10101000, CPU interface 0x10102000
   - timer 26 MHz
   - CPUs: logical 0-3 = Cortex-A55 MPIDR 0x000-0x003 (S-Boot boots 0x000),
     logical 4-7 = Meerkat M3 MPIDR 0x100-0x103
@@ -88,12 +88,13 @@ def build(canvas=(FB_W, FB_H)):
     set_prop(arm_io, 'ranges', mkadt.u64(0, 0x10000000, 0xf0000000))
     arm_io.children = [n for n in arm_io.children if n.prop('name') == mkadt.cstr('wdt')]
     
-    # GICv3 distributor (0x10900000) & redistributor (0x10940000) for Exynos 9810
+    # Stock star2lte DT uses GICv2. pe_init_fiq adds the arm-io base
+    # (0x10000000), so reg contains bus-relative offsets, not physical PAs.
     arm_io.children.append(mkadt.node('gic', [
-        ('compatible', mkadt.cstr('arm,gic-v3')),
+        ('compatible', mkadt.cstr('arm,cortex-a15-gic')),
         ('interrupt-controller', mkadt.cstr('master')),
         ('virtual-timer-intid', mkadt.u32(30)),
-        ('reg', mkadt.u64(0x10900000, 0x10000, 0x10940000, 0x80000)),
+        ('reg', mkadt.u64(0x00101000, 0x1000, 0x00102000, 0x1000)),
     ]))
     
     arm_io.children.append(mkadt.node('disp0', [

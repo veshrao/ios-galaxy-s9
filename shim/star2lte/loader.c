@@ -19,6 +19,8 @@
 #include "pmic.h"
 #include "display_probe.h"
 
+/* Global Timebase Frequencies */
+#define TIMER_HZ            26000000UL      /* 26 MHz System Timer */
 #define UFS_PROBE_DMA       0x8f0000000UL   /* high bank, outside XNU's window */
 
 /* ---- board facts (Exynos 9810 star2lte, live DT, /proc/iomem) ---- */
@@ -39,16 +41,18 @@
 #define PAGE_SIZE           4096UL
 #define BOOT_LINE_LENGTH    608
 
-/* ---- persistent log ---- */
+/* One 32 KiB log: stock DT log_pstore reserves [0xfed10000, 0xfed18000).
+ * The recovery driver must support this format to expose it via pstore. */
 struct prz {
     uint32_t sig, start, size;
     uint8_t data[];
 };
-#define RAMOOPS_PMSG        0xfed14000UL    /* after dump, console, ftrace */
 static volatile struct prz *const prz = (volatile struct prz *)RAMOOPS_CONSOLE;
-static volatile struct prz *const prz2 = (volatile struct prz *)RAMOOPS_PMSG;
 #define PRZ_DATA_MAX        (RAMOOPS_CONSOLE_SIZE - 12)
-static uint32_t log_len, log2_len;
+static uint32_t log_len;
+
+/* Helper function prototype for early delay loops */
+static void delay_ms(unsigned ms);
 
 static void prz_put(volatile struct prz *z, uint32_t *len, char c)
 {
@@ -67,7 +71,6 @@ static void log_ch1(char c)
 static void log_ch(char c)
 {
     prz_put(prz, &log_len, c);
-    prz_put(prz2, &log2_len, c);
 }
 
 /* ---- screen console ---- */
@@ -286,13 +289,25 @@ static void rtc_bootarg(volatile struct boot_args *ba, uint64_t raw)
     ba->CommandLine[at] = 0;
 }
 
+static uint64_t ticks(void)
+{
+    uint64_t v;
+    __asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(v));
+    return v;
+}
+
+static void delay_ms(unsigned ms)
+{
+    uint64_t end = ticks() + TIMER_HZ / 1000 * ms;
+    while (ticks() < end)
+        ;
+}
+
 uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 {
     *(volatile uint32_t *)DECON_TRIG = DECON_TRIG_UNMASK;
     prz->sig = PRZ_SIG;
     prz->start = prz->size = 0;
-    prz2->sig = PRZ_SIG;
-    prz2->start = prz2->size = 0;
     fill(0, 0, FB_W, FB_H, 0xff000000U);
     fg = 0xffffff00U;
     out("STAR2LTE LOADER BEGIN  (ios-s9plus Exynos 9810 XNU loader)\n");
@@ -415,15 +430,17 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
     clean(ba_pa, ba_pa + PAGE_SIZE);
 
     fg = 0xff40ff40U;
-    out("\nJUMP TO XNU\n");
+    out("\nJUMP TO XNU IN 10 SECONDS...\n");
     reserve_marker();
 
     /* Flush logs to persistent RAM */
     clean(RAMOOPS_CONSOLE, RAMOOPS_CONSOLE + RAMOOPS_CONSOLE_SIZE);
-    clean(RAMOOPS_PMSG, RAMOOPS_PMSG + RAMOOPS_CONSOLE_SIZE);
 
     /* Flush entire framebuffer so the AMOLED displays the logs! */
     clean(FB_BASE, FB_BASE + (FB_STRIDE * FB_H));
+
+    /* Wait 10 seconds to allow the user to read the console text on the screen */
+    delay_ms(10000);
 
     return entry_pa;
 }
