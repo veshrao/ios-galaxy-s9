@@ -11,21 +11,31 @@
 # against staged trees (bsd/sweet_hfs/...) are reported as skipped.
 # Usage: prep-xnu-tree.sh PATCH_DIR WORK_DIR
 set -uo pipefail
+
 patches=$(realpath "$1")
 work=$2
 mkdir -p "$work"
+
+# Locate the root of our repository dynamically
+repo=$(git rev-parse --show-toplevel 2>/dev/null || cd "$(dirname "$0")/../.." && pwd)
+
 if [[ ! -d "$work/xnu-orig/.git" ]]; then
-	git clone -q --depth 1 --branch xnu-8796.141.3 https://github.com/apple-oss-distributions/xnu.git "$work/xnu-orig" || exit 1
+    echo "[*] Cloning clean upstream Apple XNU (xnu-8796.141.3)..."
+    git clone -q --depth 1 --branch xnu-8796.141.3 https://github.com/apple-oss-distributions/xnu.git "$work/xnu-orig" || exit 1
 fi
+
 rm -rf "$work/xnu"
+echo "[*] Initializing XNU build tree workspace..."
 cp -a "$work/xnu-orig" "$work/xnu"
 cd "$work/xnu"
-git config user.email local@s8
-git config user.name local
+
+# Brand local commits for the star2lte port
+git config user.email local@star2lte
+git config user.name "Rakyat Digital Porting Team"
 git tag -f base >/dev/null
 
-recount() {	# rewrite @@ counts from the hunk bodies
-	python3 - "$1" <<'PY'
+recount() { # rewrite @@ counts from the hunk bodies
+    python3 - "$1" <<'PY'
 import re, sys
 lines = open(sys.argv[1]).read().split('\n')
 out, i = [], 0
@@ -49,33 +59,45 @@ sys.stdout.write('\n'.join(out))
 PY
 }
 
+echo "[*] Applying patch chain..."
 for p in "$patches"/*.patch; do
-	n=$(basename "$p")
-	how=""
-	if [[ $n == 0112-a5xelte-two-core-smp.patch ]]; then
-		# Its timebase hunk spells ACNTVCT_EL0 by encoding (S3_4_c15_c10_6);
-		# xnu-8796.141.3 uses the name. Same register, same instruction.
-		fixed=$(mktemp)
-		sed 's/S3_4_c15_c10_6/ACNTVCT_EL0/' "$p" > "$fixed"
-		p=$fixed
-	fi
-	if git apply --check "$p" 2>/dev/null; then git apply "$p" && how=git
-	elif git apply --check --unidiff-zero "$p" 2>/dev/null; then git apply --unidiff-zero "$p" && how=git-u0
-	elif patch -p1 --dry-run -s -f -N < "$p" >/dev/null 2>&1; then patch -p1 -s -f -N < "$p" && how=patch-p1
-	elif patch -p2 --dry-run -s -f -N < "$p" >/dev/null 2>&1; then patch -p2 -s -f -N < "$p" && how=patch-p2
-	else
-		fixed=$(mktemp); recount "$p" > "$fixed"
-		if patch -p1 --dry-run -s -f -N < "$fixed" >/dev/null 2>&1; then patch -p1 -s -f -N < "$fixed" && how=recount
-		fi
-		rm -f "$fixed"
-	fi
-	find . -name '*.orig' -newer "$p" -delete 2>/dev/null
-	if [[ -z $how ]]; then
-		echo "SKIP  $n"
-		continue
-	fi
-	[[ $how == git ]] || echo "FIXUP $n ($how)"
-	git add -A >/dev/null
-	git commit -qm "$n" --allow-empty
+    [ -f "$p" ] || continue
+    n=$(basename "$p")
+    how=""
+    if [[ $n == 0112-a5xelte-two-core-smp.patch ]]; then
+        # Its timebase hunk spells ACNTVCT_EL0 by encoding (S3_4_c15_c10_6);
+        # xnu-8796.141.3 uses the name. Same register, same instruction.
+        fixed=$(mktemp)
+        sed 's/S3_4_c15_c10_6/ACNTVCT_EL0/' "$p" > "$fixed"
+        p=$fixed
+    fi
+    if git apply --check "$p" 2>/dev/null; then git apply "$p" && how=git
+    elif git apply --check --unidiff-zero "$p" 2>/dev/null; then git apply --unidiff-zero "$p" && how=git-u0
+    elif patch -p1 --dry-run -s -f -N < "$p" >/dev/null 2>&1; then patch -p1 -s -f -N < "$p" && how=patch-p1
+    elif patch -p2 --dry-run -s -f -N < "$p" >/dev/null 2>&1; then patch -p2 -s -f -N < "$p" && how=patch-p2
+    else
+        fixed=$(mktemp); recount "$p" > "$fixed"
+        if patch -p1 --dry-run -s -f -N < "$fixed" >/dev/null 2>&1; then patch -p1 -s -f -N < "$fixed" && how=recount
+        fi
+        rm -f "$fixed"
+    fi
+    find . -name '*.orig' -newer "$p" -delete 2>/dev/null
+    if [[ -z $how ]]; then
+        echo "SKIP  $n"
+        continue
+    fi
+    [[ $how == git ]] || echo "FIXUP $n ($how)"
+    git add -A >/dev/null
+    git commit -qm "$n" --allow-empty
 done
+
+# Automatically apply our custom star2lte register overlayers to the prepared tree
+if [ -f "$repo/tools/star2lte/apply-star2lte.py" ]; then
+    echo "[*] Applying Exynos 9810 register overlays via apply-star2lte.py..."
+    python3 "$repo/tools/star2lte/apply-star2lte.py" "$work/xnu"
+    git add -A >/dev/null
+    git commit -qm "apply-star2lte register overlays" --allow-empty
+fi
+
+echo "[+] Rebuild complete!"
 echo "tree=$work/xnu commits=$(git rev-list --count base..HEAD)"

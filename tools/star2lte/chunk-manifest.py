@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-chunk SHA-256 manifest of an image, for tools/dreamlte/flash-chunks.ps1.
+"""Per-chunk SHA-256 manifest of an image, for tools/star2lte/flash-chunks.ps1.
 
   chunk-manifest.py IMAGE OUT.json [CHUNK_MIB]
 
