@@ -19,7 +19,7 @@ index 3ba2fd4..dcbd143 100644
  #define A5_GPA2_CON 0x40u
  #define A5_GPA2_DAT 0x44u
  #define A5_GPA2_PUD 0x48u
-@@ -34,6 +39,23 @@ a5_keys_read(uint32_t offset)
+@@ -34,6 +39,21 @@ a5_keys_read(uint32_t offset)
  	return value;
  }
  
@@ -90,7 +90,7 @@ index 7ba309b..ba647a8 100644
  
  extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
  extern void thread_terminate_self(void);
-@@ -615,10 +616,317 @@ a5touch_start_early(vm_offset_t nfc, vm_offset_t alive)
+@@ -615,10 +616,297 @@ a5touch_start_early(vm_offset_t nfc, vm_offset_t alive)
  	}
  }
  
@@ -412,7 +412,7 @@ index 6b926fe..e70a4ce 100644
  #include <sys/param.h>
  #include <sys/systm.h>
  #include <sys/buf.h>
-@@ -69,9 +69,37 @@ extern void sweet_usb_probe(void);
+@@ -69,9 +69,30 @@ extern void sweet_usb_probe(void);
  #define HCS_UTRLRDY     (1u << 1)
  #define CAP_64AS        (1u << 24)              /* 64-bit DMA addressing */
  
@@ -443,7 +443,7 @@ index 6b926fe..e70a4ce 100644
  #define PRDT_MAX        (BOUNCE_SIZE / PRDT_CHUNK)
  #define CMD_TIMEOUT_NS  (5ull * NSEC_PER_SEC)
  #define CMD_SPIN_NS     (50ull * NSEC_PER_USEC)
-@@ -100,6 +128,7 @@ struct ucd {
+@@ -100,5 +128,6 @@ struct ucd {
  static struct {
  	vm_offset_t regs;
 +	vm_offset_t vs_regs;                    /* Exynos vendor HCI registers */
@@ -462,7 +462,7 @@ index 6b926fe..e70a4ce 100644
  	if (len) {
  		uint32_t n = 0;
  		for (uint32_t done = 0; done < len; done += PRDT_CHUNK, n++) {
-@@ -180,7 +213,11 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+@@ -180,6 +213,10 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
  			ucd->prdt[n].addr_hi = (uint32_t)((bounce_pa + done) >> 32);
  			ucd->prdt[n].dbc = chunk - 1;
  		}
@@ -482,7 +482,7 @@ index 6b926fe..e70a4ce 100644
  		}
  	} else {
  		dma_sync(DMA_UTRL, sizeof(*utrd));
-@@ -204,6 +241,9 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+@@ -204,5 +241,8 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
  	}
  	__builtin_arm_dsb(0xf);
 +#if defined(EXYNOS_UFS)
@@ -514,7 +514,7 @@ index 6b926fe..e70a4ce 100644
  		printf("SWEET UFS: host not ready (hce 0x%x hcs 0x%x)\n", hce, hcs);
  		return ENXIO;
  	}
-@@ -589,13 +636,17 @@ sweet_ufs_init(void)
+@@ -589,12 +636,16 @@ sweet_ufs_init(void)
  	DTEntry node;
  	uintptr_t const *reg = NULL;
  	unsigned int size = 0;
@@ -534,7 +534,7 @@ index 6b926fe..e70a4ce 100644
  		return ENXIO;
  	}
  	PE_parse_boot_argn("ufsroot", want, sizeof(want));
-@@ -608,6 +659,9 @@ sweet_ufs_init(void)
+@@ -608,5 +659,8 @@ sweet_ufs_init(void)
  	su.wait = (wait == 1);
  	su.regs = ml_io_map(reg[0], reg[1]);
 +#if defined(EXYNOS_UFS)
@@ -543,7 +543,7 @@ index 6b926fe..e70a4ce 100644
  	if (kmem_alloc_contig(kernel_map, &su.dma, DMA_SIZE, PAGE_MASK, 0, 0,
  		KMA_DATA | KMA_ZERO | KMA_PERMANENT, VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
  		printf("SWEET UFS: no contiguous DMA memory\n");
-@@ -623,6 +677,15 @@ sweet_ufs_init(void)
+@@ -623,5 +677,14 @@ sweet_ufs_init(void)
  	lck_mtx_lock(&sweet_ufs_lock);
  	error = ufs_take_over_host();
 +#if defined(EXYNOS_UFS)
@@ -558,7 +558,7 @@ index 6b926fe..e70a4ce 100644
  	if (!error) {
  		static const uint8_t tur[6] = { 0x00 };
  		/* The first command after the bootloader may report a unit attention. */
-@@ -656,10 +719,12 @@ sweet_ufs_init(void)
+@@ -656,9 +719,11 @@ sweet_ufs_init(void)
  		su.writable ? "read-write" : "read-only", su.dma_pa);
  	sweet_log_start();
  	sweet_sample_start();
@@ -583,7 +583,7 @@ index 7a32a23..13e62e5 100644
  #include <sys/sysctl.h>
  }
  
-@@ -1366,6 +1368,15 @@ PEGetUTCTimeOfDay(clock_sec_t * secs, clock_usec_t * usecs)
+@@ -1366,5 +1368,14 @@ PEGetUTCTimeOfDay(clock_sec_t * secs, clock_usec_t * usecs)
  	if (gIOPlatform) {
  		gIOPlatform->getUTCTimeOfDay(secs, &nsecs);
  	}
@@ -758,7 +758,7 @@ index 55d0057..5bd24a7 100644
  	}
  	for (unsigned int i = 0; i < topology->num_cpus; i++) {
  		SweetCPU *cpu = __atomic_load_n(&sweet_cpus[i], __ATOMIC_ACQUIRE);
-@@ -279,13 +289,62 @@ SweetCPU::startCPU(vm_offset_t start_paddr, vm_offset_t arg_paddr)
+@@ -279,13 +289,51 @@ SweetCPU::startCPU(vm_offset_t start_paddr, vm_offset_t arg_paddr)
  {
  	const ml_topology_cpu_t *cpu = &ml_get_topology_info()->cpus[getCPUNumber()];
  	/* cpu_start() passes NULL,NULL: x20/x21 are set by LowResetVectorBase. */
@@ -815,14 +815,14 @@ diff --git iokit/Kernel/arm/SweetFramebuffer.cpp iokit/Kernel/arm/SweetFramebuff
 index 356ff51..ec6b9da 100644
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -48,6 +48,7 @@ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+@@ -48,5 +48,6 @@ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
  #include <IOKit/IOTimerEventSource.h>
  #include <IOKit/system.h>
  #include <pexpert/pexpert.h>
 +#include <pexpert/arm64/board_config.h>
  #include <kern/clock.h>
  #include <sys/proc.h>
-@@ -120,6 +121,9 @@ public:
+@@ -120,5 +121,8 @@ public:
  	uint32_t      fFlushTicks;    /* vsync ticks between panel copies */
  	bool          fPowerOff;      /* RequestPowerChange(0) */
  	uint32_t      fFadeStep;      /* fade-out steps done while off */
@@ -860,7 +860,7 @@ index 356ff51..ec6b9da 100644
  	if (!native && fWidth <= SWEET_FB_LOGICAL_W && fHeight <= SWEET_FB_LOGICAL_H) {
  		fLogicalW = SWEET_FB_LOGICAL_W;
  		fLogicalH = SWEET_FB_LOGICAL_H;
-@@ -211,6 +220,11 @@ AppleCLCD::start(IOService *provider)
+@@ -211,5 +220,10 @@ AppleCLCD::start(IOService *provider)
  	uint32_t hz = 10;
  	PE_parse_boot_argn("sweetfb_hz", &hz, sizeof(hz));
  	fFlushTicks = (hz == 0 || hz >= 60) ? 1 : 60 / hz;
@@ -871,7 +871,7 @@ index 356ff51..ec6b9da 100644
 +	}
  	fVsync->setTimeoutUS(SWEET_FB_VSYNC_US);
  	setProperty(kIOUserClientClassKey, "IOMobileFramebufferUserClient");
-@@ -302,6 +316,36 @@ get32(const uint8_t *p, uint32_t off)
+@@ -302,5 +316,30 @@ get32(const uint8_t *p, uint32_t off)
  	return v;
  }
  
@@ -919,7 +919,7 @@ index 356ff51..ec6b9da 100644
  	if ((++sweet_fb_swap_count % 1000) == 0) {
  		IOLog("SWEET FB: %llu swaps\n", sweet_fb_swap_count);
  	}
-@@ -328,6 +381,10 @@ void
+@@ -328,4 +381,8 @@ void
  AppleCLCD::present(const uint8_t *rec)
  {
  	uint32_t mask = get32(rec, 0x104);
@@ -987,7 +987,7 @@ diff --git osfmk/arm64/arm_vm_init.c osfmk/arm64/arm_vm_init.c
 index fbc383d..57e6096 100644
 --- a/osfmk/arm64/arm_vm_init.c
 +++ b/osfmk/arm64/arm_vm_init.c
-@@ -1905,10 +1905,17 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+@@ -1905,9 +1905,16 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
  #endif
  
  	// Slide the physical aperture to a random page-aligned location within the slide range
@@ -1004,7 +1004,7 @@ index fbc383d..57e6096 100644
  
  #if XNU_MONITOR
  	physmap_base = ROUND_TWIG(physmap_base);
-@@ -2310,6 +2317,9 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+@@ -2310,5 +2317,8 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
  	va_l1 = dynamic_memory_begin;
  	va_l1_end = va_l1 + ((2 + (mem_segments * 10)) << 20);
  	va_l1_end += round_page(args->Video.v_height * args->Video.v_rowBytes);
@@ -1091,7 +1091,7 @@ index 7da26d2..1606c91 100644
  La5_entry_row:
  	mov     x14, x10
  	mov     x13, #36
-@@ -710,18 +710,18 @@ Lkernelcache_base_found:
+@@ -710,19 +710,19 @@ Lkernelcache_base_found:
  	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
  
  #if defined(A5XELTE)
@@ -1116,7 +1116,7 @@ index 7da26d2..1606c91 100644
  La5_fb_attr:
  	ldr     x11, [x12]
  	bic     x11, x11, #(ARM_TTE_BLOCK_ATTRINDXMASK)
-@@ -892,10 +892,10 @@ common_start:
+@@ -892,9 +892,9 @@ common_start:
  #if defined(A5XELTE)
  	/* Blue block: the 4 KiB MMU is active and the framebuffer alias works. */
 -	MOV64   x10, 0x6707ecc0
@@ -1128,7 +1128,7 @@ index 7da26d2..1606c91 100644
  La5_mmu_row:
  	mov     x14, x10
  	mov     x13, #36
-@@ -936,10 +936,10 @@ La5_mmu_pixel:
+@@ -936,9 +936,9 @@ La5_mmu_pixel:
  #if defined(A5XELTE)
  	/* fp_enabled: write directly to the DECON scanout alias. */
 -	MOV64   x10, 0x670a08c0
@@ -1140,7 +1140,7 @@ index 7da26d2..1606c91 100644
  La5_fp_enabled_row:
  	mov     x14, x10
  	mov     x13, #36
-@@ -971,10 +971,10 @@ La5_fp_enabled_pixel:
+@@ -971,9 +971,9 @@ La5_fp_enabled_pixel:
  #if defined(A5XELTE)
  	/* tunables_done: write directly to the DECON scanout alias. */
 -	MOV64   x10, 0x670c24c0
@@ -1152,7 +1152,7 @@ index 7da26d2..1606c91 100644
  La5_tunables_done_row:
  	mov     x14, x10
  	mov     x13, #36
-@@ -1018,10 +1018,10 @@ La5_tunables_done_pixel:
+@@ -1018,9 +1018,9 @@ La5_tunables_done_pixel:
  #if defined(A5XELTE)
  	/* arm_init_jump: write directly to the DECON scanout alias. */
 -	MOV64   x10, 0x670e40c0
@@ -1258,7 +1258,7 @@ index 6394730..de4a6a7 100644
  	pmap_startup(&virtual_space_start, &virtual_space_end);
  	virtual_space_start = round_page(virtual_space_start);
  	virtual_space_end = trunc_page(virtual_space_end);
-@@ -1439,6 +1442,9 @@ pmap_startup(
+@@ -1439,5 +1442,8 @@ pmap_startup(
  	vm_pages = (vm_page_t) pmap_steal_freeable_memory(npages * sizeof *vm_pages);
  
 +#if defined(ARM64_BOARD_CONFIG_A5XELTE)
@@ -1267,7 +1267,7 @@ index 6394730..de4a6a7 100644
  	/*
  	 * Check if we want to initialize pages to a known value
  
-@@ -1540,6 +1546,11 @@ pmap_startup(
+@@ -1540,5 +1546,10 @@ pmap_startup(
  		if (!pmap_next_page(&phys_page)) {
  			break;
  		}
@@ -1278,7 +1278,7 @@ index 6394730..de4a6a7 100644
 +#endif
  		if (phys_page < max_valid_low_ppnum) {
  			++low_page_count;
-@@ -1575,6 +1586,9 @@ pmap_startup(
+@@ -1575,5 +1586,8 @@ pmap_startup(
  		}
  	}
  	vm_page_pages = vm_pages_count; /* used to report to user space */
@@ -1309,7 +1309,7 @@ diff --git pexpert/arm/pe_serial.c pexpert/arm/pe_serial.c
 index ed7dccd..1966bdd 100644
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -721,6 +721,59 @@ static volatile uint32_t *fbcon_base;
+@@ -721,6 +721,56 @@ static volatile uint32_t *fbcon_base;
  static uint32_t fbcon_width, fbcon_height, fbcon_stride;
  static uint32_t fbcon_cols, fbcon_rows, fbcon_col, fbcon_row;
  
@@ -1390,7 +1390,7 @@ diff --git pexpert/pexpert/arm64/A5XELTE.h pexpert/pexpert/arm64/A5XELTE.h
 index e6718d4..b6f812d 100644
 --- a/pexpert/pexpert/arm64/A5XELTE.h
 +++ b/pexpert/pexpert/arm64/A5XELTE.h
-@@ -24,6 +24,43 @@
+@@ -24,6 +24,40 @@
  #define HAS_GIC_V3                    0
  #define A5XELTE_VTIMER_INTID         27
  
