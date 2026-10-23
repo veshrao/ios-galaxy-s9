@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- * Galaxy S9+ (SM-G965F, Exynos 9810, star2lte) XNU loader entry.
+ * Galaxy S8 (SM-G950F, Exynos 8895) XNU loader entry.
  *
  * arm64 Linux Image header so Samsung S-Boot treats us like a kernel. S-Boot
- * enters at EL1 with the MMU off, CNTFRQ_EL0 = 0 and x0 = DTB.
- * Flushes dirty S-Boot display cache lines to DRAM on Exynos 9810.
+ * enters at EL1 with the MMU off, CNTFRQ_EL0 = 0 and x0 = DTB (s8-probe
+ * v2-v7). Position independent: the header asks for text_offset 0x80000 like
+ * the stock kernel, but S-Boot has been seen loading us at 0x800b4000.
  */
 	.section .text.head, "ax"
 	.globl _head
@@ -18,39 +19,26 @@ _head:
 	.quad	0
 	.ascii	"ARM\x64"		/* magic */
 	.long	0
+
 	.text
 	.globl _start
 _start:
 	msr	daifset, #0xf
-	mov	x19, x0			/* Save DTB */
+	mov	x19, x0			/* DTB */
 	mrs	x20, CurrentEL
 	mrs	x21, sctlr_el1
-
-	/* Force-flush display cache lines (0xcc000000) so the screen console renders
-	 * directly from DRAM instead of displaying S-Boot's dirty cache lines. */
-	mov	x2, #0x10000000
-	mov	x3, #0x11000000		/* Flush entire 64MB framebuffer aperture */
-1:	dc	civac, x2		/* Clean and Invalidate data cache line by VA to PoC */
-	add	x2, x2, #64		/* Exynos 9810 cache line size (64 bytes) */
-	cmp	x2, x3
-	b.lo	1b
-	dsb	sy
-	isb
-
 	msr	spsel, #1
 	adr	x1, _stack_top
 	mov	sp, x1
 	adr	x1, vectors
 	msr	vbar_el1, x1
 	isb
-
 	adr	x1, _bss_start
 	adr	x2, _bss_end
-3:	cmp	x1, x2
+1:	cmp	x1, x2
 	b.hs	2f
 	str	xzr, [x1], #8
-	b	3b
-
+	b	1b
 2:	mov	x0, x19
 	lsr	x1, x20, #2
 	mov	x2, x21
@@ -59,8 +47,8 @@ _start:
 	mov	x16, x0
 	adr	x1, dl_boot_args
 	ldr	x0, [x1]		/* boot_args PA for start_first_cpu */
-
-	/* XNU's entry expects the MMU and caches off. */
+	/* XNU's entry expects the MMU and caches off. Data was written with the
+	 * MMU off (Device memory) and the copies were cleaned to PoC anyway. */
 	mrs	x14, sctlr_el1
 	bic	x14, x14, #1		/* M */
 	bic	x14, x14, #4		/* C */
@@ -70,7 +58,6 @@ _start:
 	dsb	sy
 	isb
 	br	x16
-
 4:	wfe
 	b	4b
 

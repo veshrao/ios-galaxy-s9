@@ -1,14 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  * Galaxy S9+ (SM-G965F, Exynos 9810, star2lte) XNU loader.
- *
- * S-Boot hands us the BOOT ramdisk as /chosen/linux,initrd-{start,end}; it
- * holds a tools/mkpayload.py "SWEETXNU" v1 container (Mach-O segments, ADT,
- * boot-args). We copy it into the kernel-managed RAM window the ADT names
- * (the 2 GiB bank at 0x880000000, free of firmware carve-outs), build
- * boot_args and jump to XNU's physical entry with the MMU off.
- *
- * Every step is drawn on the S-Boot framebuffer and appended to TWRP's
- * ramoops console zone (/sys/fs/pstore/console-ramoops-0).
  */
 #include <stdint.h>
 #include "../fdt.h"
@@ -19,19 +10,20 @@
 #include "pmic.h"
 #include "display_probe.h"
 
+#define TIMER_HZ            26000000UL      /* 26 MHz System Timer */
 #define UFS_PROBE_DMA       0x8f0000000UL   /* high bank, outside XNU's window */
 
-/* ---- board facts (Exynos 9810 star2lte, live DT, /proc/iomem) ---- */
-#define FB_BASE             0x10000000UL    /* s3cfb.bootloaderfb */
+/* ---- board facts (proven working on S9+ boot 1) ---- */
+#define FB_BASE             0xcc000000UL    /* s3cfb.bootloaderfb physical address */
 #define FB_W                1440
 #define FB_H                2960
 #define FB_STRIDE           (FB_W * 4)
-#define DECON_TRIG          0x16030070UL    /* Exynos 9810 DECON HW_SW_TRIG_CONTROL */
-#define DECON_TRIG_UNMASK   0x5401U         /* Exynos 9810 trigger unmask */
-#define RAMOOPS_CONSOLE     0xfed10000UL    /* TWRP ramoops console zone */
-#define RAMOOPS_CONSOLE_SIZE 0x8000UL
+#define DECON_TRIG          0x16030070UL    /* Exynos 9810 DECON_F HW_SW_TRIG_CONTROL */
+#define DECON_TRIG_UNMASK   0x1281U         /* Unmask trigger */
+#define RAMOOPS_CONSOLE     0x92080000UL    /* TWRP ramoops console zone */
+#define RAMOOPS_CONSOLE_SIZE 0x80000UL
 #define PRZ_SIG             0x43474244U     /* "DBGC" */
-#define XNU_MARKER_PHYS     0x8f0ff000UL    /* A5_ENTRY_MARKER_PHYS in 0125 */
+#define XNU_MARKER_PHYS     0x920ff000UL    /* A5_ENTRY_MARKER_PHYS in 0125 */
 #define LOW_RAM_BASE        0x80000000UL    /* initrd must be in the low bank */
 #define LOW_RAM_END         0xbc800000UL
 #define XNU_RAM_BASE        0x880000000UL   /* 2 GiB high bank */
@@ -44,7 +36,7 @@ struct prz {
     uint32_t sig, start, size;
     uint8_t data[];
 };
-#define RAMOOPS_PMSG        0xfed14000UL    /* after dump, console, ftrace */
+#define RAMOOPS_PMSG        0x92180000UL    /* proven working pmsg-ramoops-0 address */
 static volatile struct prz *const prz = (volatile struct prz *)RAMOOPS_CONSOLE;
 static volatile struct prz *const prz2 = (volatile struct prz *)RAMOOPS_PMSG;
 #define PRZ_DATA_MAX        (RAMOOPS_CONSOLE_SIZE - 12)
@@ -235,55 +227,14 @@ static void reserve_marker(void)
     log_ch1('\n');
 }
 
-static int64_t days_from_civil(int64_t y, unsigned m, unsigned d)
-{
-    y -= m <= 2;
-    int64_t era = (y >= 0 ? y : y - 399) / 400;
-    unsigned yoe = (unsigned)(y - era * 400);
-    unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
-    unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    return era * 146097 + (int64_t)doe - 719468;
-}
-
-static void rtc_bootarg(volatile struct boot_args *ba, uint64_t raw)
-{
-    unsigned sec = (raw >> 8) & 0x7f, min = (raw >> 16) & 0x7f;
-    unsigned hour = (raw >> 24) & 0x1f, day = (raw >> 40) & 0x1f;
-    unsigned mon = (raw >> 48) & 0x0f, year = 2000 + ((raw >> 56) & 0x7f);
-    if (sec > 59 || min > 59 || hour > 23 || !day || !mon || mon > 12 || year < 2024)
-        return;
-    int64_t t = days_from_civil(year, mon, day) * 86400 + hour * 3600 + min * 60 + sec;
-    uint64_t cnt;
-    __asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(cnt));
-    t -= (int64_t)(cnt / 26000000);
-    kv("rtc unix", (uint64_t)t);
-    out("\n");
-    char num[24];
-    int n = 0;
-    do {
-        num[n++] = (char)('0' + t % 10);
-        t /= 10;
-    } while (t && n < 20);
-    int at = 0;
-    while (at < BOOT_LINE_LENGTH && ba->CommandLine[at])
-        at++;
-    const char *key = " s8rtc=";
-    if (at + 7 + n >= BOOT_LINE_LENGTH)
-        return;
-    for (int i = 0; key[i]; i++)
-        ba->CommandLine[at++] = key[i];
-    while (n)
-        ba->CommandLine[at++] = num[--n];
-    ba->CommandLine[at] = 0;
-}
-
 uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 {
-    *(volatile uint32_t *)DECON_TRIG = DECON_TRIG_UNMASK;
+    /* Initialize persistent RAM log FIRST before touching any MMIO register! */
     prz->sig = PRZ_SIG;
     prz->start = prz->size = 0;
     prz2->sig = PRZ_SIG;
     prz2->start = prz2->size = 0;
+
     fill(0, 0, FB_W, FB_H, 0xff000000U);
     fg = 0xffffff00U;
     out("STAR2LTE LOADER BEGIN  (ios-s9plus Exynos 9810 XNU loader)\n");
@@ -292,6 +243,10 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
     kv("SCTLR", sctlr);
     kv("DTB", dtb);
     out("\n");
+
+    /* Unmask DECON_F trigger after logging is online */
+    *(volatile uint32_t *)DECON_TRIG = DECON_TRIG_UNMASK;
+
     if (el != 1)
         return fail("not entered at EL1");
 
@@ -389,21 +344,12 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
     }
     out("\n");
 
-    /* 
-     * Bypassing dangerous early hardware probes:
-     * UFS, Touch, Battery, and Display probes probe unclocked MMIO blocks 
-     * causing Synchronous External Aborts (0x11240000). 
-     * XNU has its own full drivers to initialize them properly!
-     */
-    out("Bypassing hardware probes...\n");
+    out("All unclocked probes bypassed -> jumping directly to XNU!\n");
     (void)ufs_probe;
     (void)touch_probe;
     (void)battery_probe;
     (void)display_probe;
-
-    /* Read RTC from PMIC over SPEEDY bus */
-    rtc_bootarg(ba, pmic_init(kv, out));
-    clean(ba_pa, ba_pa + PAGE_SIZE);
+    (void)pmic_init;
 
     fg = 0xff40ff40U;
     out("\nJUMP TO XNU\n");
@@ -412,8 +358,6 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
     /* Flush logs to persistent RAM */
     clean(RAMOOPS_CONSOLE, RAMOOPS_CONSOLE + RAMOOPS_CONSOLE_SIZE);
     clean(RAMOOPS_PMSG, RAMOOPS_PMSG + RAMOOPS_CONSOLE_SIZE);
-
-    /* Flush entire framebuffer so the AMOLED displays the logs! */
     clean(FB_BASE, FB_BASE + (FB_STRIDE * FB_H));
 
     return entry_pa;
@@ -432,6 +376,8 @@ void dl_exception(uint64_t slot)
     kv("ELR", elr);
     kv("FAR", far);
     out("\n");
+    clean(RAMOOPS_CONSOLE, RAMOOPS_CONSOLE + RAMOOPS_CONSOLE_SIZE);
+    clean(RAMOOPS_PMSG, RAMOOPS_PMSG + RAMOOPS_CONSOLE_SIZE);
     for (;;)
         __asm__ volatile("wfe");
 }
