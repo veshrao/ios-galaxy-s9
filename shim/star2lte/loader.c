@@ -345,7 +345,7 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
     out("\n");
 
     out("All unclocked probes bypassed -> jumping directly to XNU!\n");
-    (void)ufs_probe;
+    ufs_probe(kv, out, UFS_PROBE_DMA);
     (void)touch_probe;
     (void)battery_probe;
     (void)display_probe;

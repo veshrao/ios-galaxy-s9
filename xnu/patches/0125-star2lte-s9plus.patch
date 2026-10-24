@@ -12,7 +12,7 @@ index 3ba2fd4..dcbd143 100644
  extern void sweet_hid_key(int key, int down);
  
 +#if defined(STAR2LTE)
-+#define A5_ALIVE_PA 0x11830000u            /* Exynos 8895 pinctrl ALIVE */
++#define A5_ALIVE_PA 0x14050000u            /* Exynos 8895 pinctrl ALIVE */
 +#else
  #define A5_ALIVE_PA 0x139b0000u
 +#endif
@@ -102,17 +102,17 @@ index 7ba309b..ba647a8 100644
 + * The loader (shim/dreamlte) ungates both USI blocks with their clock on
 + * OSCCLK, sets USI v1 I2C mode and the pins, and powers the touch rails.
 + *
-+ * Touch: Samsung S6SY761 at 0x48 on hsi2c_23 (USI09, 0x108e0000), its
++ * Touch: Samsung S6SY761 at 0x48 on hsi2c_23 (USI09, 0x14360000), its
 + * interrupt gpa1-0 active low (boot 26: boot status 0x20, device id
 + * 0xac3761). Event protocol from mainline s6sy761.c; raw 0..4095 axes go
 + * to SweetHIDTouch's 1080x1920 grid.
 + *
-+ * Battery: MAX77865 on hsi2c_32 (USI13 second HSI2C, 0x10970000), fuel
++ * Battery: MAX77865 on hsi2c_32 (USI13 second HSI2C, 0x14350000), fuel
 + * gauge 0x36 and charger 0x69 (Samsung max77865_fuelgauge.c/_charger.c).
 + */
-+#define S8TS_HSI2C_PA           0x108e0000u
-+#define S8BAT_HSI2C_PA          0x10970000u
-+#define S8TS_ALIVE_PA           0x11830000u
++#define S8TS_HSI2C_PA           0x14360000u
++#define S8BAT_HSI2C_PA          0x14350000u
++#define S8TS_ALIVE_PA           0x14050000u
 +#define S8TS_GPA1_DAT           0x44u
 +#define S8TS_ADDR               0x48u
 +#define S8BAT_FG                0x36u
@@ -773,8 +773,8 @@ index 55d0057..5bd24a7 100644
 +#if defined(STAR2LTE)
 +	/* Exynos 8895: logical 0..3 = A53 MPIDR 0x100..0x103 (boot cluster);
 +	 * logical 4..7 = Mongoose M2 MPIDR 0..3. */
-+	uint32_t expected_mpidr = cpu->cpu_id < 4 ? 0x100U + cpu->cpu_id :
-+	    cpu->cpu_id - 4;
++	uint32_t expected_mpidr = cpu->cpu_id < 4 ? cpu->cpu_id :
++	    0x100U + cpu->cpu_id - 4;
 +#else
  	uint32_t expected_mpidr = cpu->cpu_id < 4 ? cpu->cpu_id :
  	    0x100U + cpu->cpu_id - 4;
@@ -942,7 +942,7 @@ index 356ff51..ec6b9da 100644
 +sweet_fb_wait_frame_done(void)
 +{
 +	if (sweet_fb_decon == 0) {
-+		sweet_fb_decon = ml_io_map(0x14040000, 0x1000);
++		sweet_fb_decon = ml_io_map(0x16030000, 0x1000);
 +		if (sweet_fb_decon == 0) {
 +			return;
 +		}

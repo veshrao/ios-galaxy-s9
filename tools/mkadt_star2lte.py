@@ -40,7 +40,7 @@ def cpu_node(logical):
     cluster = 0 if a55 else 1
     return [
         ('device_type', mkadt.cstr('cpu')),
-        ('compatible', mkadt.cstr('arm,cortex-a55' if a55 else 'samsung,mongoose-m3') +
+        ('compatible', mkadt.cstr('arm,cortex-a55' if a55 else 'samsung,mongoose-m3') + (mkadt.cstr('arm,cortex-a53') if a55 else b'') +
          mkadt.cstr('ARM,v8')),
         ('reg', mkadt.u32(mpidr)),
         ('cpu-id', mkadt.u32(logical)),
@@ -103,9 +103,12 @@ def build(canvas=(FB_W, FB_H)):
         ('height', mkadt.u32(FB_H)),
         ('stride', mkadt.u32(FB_W * 4)),
     ]))
-    root.children.append(mkadt.node('star2lte-ufs', [
-        ('reg', mkadt.u64(0x11120000, 0x200, 0x11121100, 0x200)),
-    ]))
+    # UFS nodes: provide aliases so any compiled kernel string matches!
+    for name in ('star2lte-ufs', 'dreamlte-ufs', 'sweet-ufs'):
+        root.children.append(mkadt.node(name, [
+            ('compatible', mkadt.cstr('samsung,exynos-ufs') + mkadt.cstr('samsung,star2lte-ufs')),
+            ('reg', mkadt.u64(0x11120000, 0x1000, 0x11121100, 0x1000)),
+        ]))
     return root
 
 if __name__ == '__main__':
